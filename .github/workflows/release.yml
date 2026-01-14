@@ -1,7 +1,7 @@
 on: workflow_dispatch
 jobs:
   release:
-    name: Release - ${{ matrix.platform.release_for }}
+    name: Release - ${{ matrix.platform.os_name }}
     strategy:
       matrix:
         platform:
