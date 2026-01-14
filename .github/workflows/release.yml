@@ -32,3 +32,4 @@ jobs:
         with:
           executable-name: challenge
           target: ${{ matrix.platform.target }}
+          changes-file: 
