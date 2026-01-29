@@ -1,5 +1,6 @@
-use imi_programming_challenge::pyramid::write_max_path_pyramid;
+use imi_programming_challenge::maze::Maze;
 
 fn main() {
-    let _ = write_max_path_pyramid("INPUT.txt", "OUTPUT.txt");
+    let maze = Maze::new("robots.in");
+    let _ = maze.write_solution("robots.out");
 }

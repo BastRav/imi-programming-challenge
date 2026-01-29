@@ -1,1 +1,1 @@
-pub mod pyramid;
+pub mod maze;
