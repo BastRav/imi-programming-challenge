@@ -1,6 +1,8 @@
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
+use std::hash::{Hash, DefaultHasher, Hasher};
 
 use crate::singlemaze::{Direction, SingleMaze};
 
@@ -9,6 +11,13 @@ pub struct Maze {
     maze_one: SingleMaze,
     maze_two: SingleMaze,
     solution: Vec<Direction>,
+}
+
+impl Hash for Maze {
+    fn hash<H>(&self, hasher: &mut H) where H: Hasher {
+        self.maze_one.hash(hasher);
+        self.maze_two.hash(hasher);
+    }
 }
 
 impl Maze {
@@ -21,7 +30,15 @@ impl Maze {
         Maze { maze_one, maze_two, solution: vec![]}
     }
 
+    fn get_hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+
     fn solve(&mut self) {
+        let mut hashes_seen = HashSet::new();
+        hashes_seen.insert(self.get_hash());
         let mut to_explore_next = vec![self.clone()];
         for _ in 0..1000 {
             let to_explore = to_explore_next.clone();
@@ -33,7 +50,7 @@ impl Maze {
                         self.solution = maze1.solution;
                         return;
                     }
-                    else {
+                    else if hashes_seen.insert(maze1.get_hash()) {
                         to_explore_next.push(maze1);
                     }
                 }
@@ -43,7 +60,7 @@ impl Maze {
                         self.solution = maze2.solution;
                         return;
                     }
-                    else {
+                    else if hashes_seen.insert(maze2.get_hash()){
                         to_explore_next.push(maze2);
                     }
                 }
@@ -53,7 +70,7 @@ impl Maze {
                         self.solution = maze3.solution;
                         return;
                     }
-                    else {
+                    else if hashes_seen.insert(maze3.get_hash()){
                         to_explore_next.push(maze3);
                     }
                 }
@@ -62,7 +79,7 @@ impl Maze {
                         self.solution = maze.solution;
                         return;
                     }
-                    else {
+                    else if hashes_seen.insert(maze.get_hash()){
                         to_explore_next.push(maze);
                     }
                 }

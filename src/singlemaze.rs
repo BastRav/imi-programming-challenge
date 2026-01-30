@@ -1,4 +1,4 @@
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Hash)]
 pub enum Direction {
     North,
     East,
@@ -36,7 +36,7 @@ impl Direction {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash)]
 pub struct Guard {
     position: usize,
     patrol_path_size: usize,
@@ -77,7 +77,7 @@ impl Guard {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash)]
 pub struct SingleMaze {
     columns: usize,
     layout: Vec<bool>, // false means wall, true means open
