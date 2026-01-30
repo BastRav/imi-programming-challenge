@@ -1,11 +1,9 @@
-use std::hash::{Hash, Hasher};
-
 #[derive(Clone, PartialEq)]
 pub enum Direction {
-    North,
-    East,
-    South,
-    West,
+    North = 0,
+    East = 1,
+    South = 2,
+    West = 3,
 }
 
 impl Direction {
@@ -45,13 +43,6 @@ pub struct Guard {
     movement: i8,
     steps_to_starting_position: u8,
     reversed_direction: bool,
-}
-
-impl Hash for Guard {
-    fn hash<H>(&self, hasher: &mut H) where H: Hasher {
-        self.position.hash(hasher);
-        self.reversed_direction.hash(hasher);
-    }
 }
 
 impl Guard {
@@ -94,14 +85,6 @@ pub struct SingleMaze {
     robot_position: u16,
     pub robot_outside: bool,
     exits: Vec<(u16, Direction)>,
-}
-
-impl Hash for SingleMaze {
-    fn hash<H>(&self, hasher: &mut H) where H: Hasher {
-        self.guards.hash(hasher);
-        self.robot_position.hash(hasher);
-        self.robot_outside.hash(hasher);
-    }
 }
 
 impl SingleMaze {
@@ -161,6 +144,12 @@ impl SingleMaze {
             robot_outside: false,
             exits,
         }
+    }
+
+    pub fn get_hash(&self) -> u32 {
+        let robot_outside_hash = if self.robot_outside {1} else {0}; // 1st bit
+        let robot_position_hash = (self.robot_position as u32) << 1; // max 400 -> 2nd to 10th
+        return robot_outside_hash + robot_position_hash;
     }
 
     pub fn step(&mut self, direction: &Direction) -> bool {

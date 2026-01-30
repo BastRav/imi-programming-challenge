@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
-use std::hash::{Hash, DefaultHasher, Hasher};
 
 use crate::singlemaze::{Direction, SingleMaze};
 
@@ -11,13 +10,7 @@ pub struct Maze {
     maze_one: SingleMaze,
     maze_two: SingleMaze,
     solution: Vec<Direction>,
-}
-
-impl Hash for Maze {
-    fn hash<H>(&self, hasher: &mut H) where H: Hasher {
-        self.maze_one.hash(hasher);
-        self.maze_two.hash(hasher);
-    }
+    guards_cycle: u8,
 }
 
 impl Maze {
@@ -27,13 +20,14 @@ impl Maze {
         let mut lines = io::BufReader::new(file).lines().map(|l| l.unwrap());
         let maze_one = SingleMaze::from_lines(&mut lines);
         let maze_two = SingleMaze::from_lines(&mut lines);
-        Maze { maze_one, maze_two, solution: vec![]}
+        Maze { maze_one, maze_two, solution: vec![], guards_cycle: 0}
     }
 
-    fn get_hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        hasher.finish()
+    fn get_hash(&self) -> u32 {
+        let maze_one_hash = self.maze_one.get_hash(); // 1st to 10th for 1st maze
+        let maze_two_hash = self.maze_two.get_hash() << 10; // 11th to 20th for 2nd maze
+        let guards_cycle_hash = (self.guards_cycle as u32) << 20; // guards cycles in maximum 24 steps -> 21st to 25th
+        return maze_one_hash + maze_two_hash + guards_cycle_hash
     }
 
     fn solve(&mut self) {
@@ -91,6 +85,8 @@ impl Maze {
         let one = self.maze_one.step(direction);
         let two = self.maze_two.step(direction);
         self.solution.push(direction.clone());
+        self.guards_cycle += 1;
+        if self.guards_cycle == 24 {self.guards_cycle = 0;}
         one && two
     }
 
