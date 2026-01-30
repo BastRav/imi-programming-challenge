@@ -100,6 +100,7 @@ impl Hash for SingleMaze {
     fn hash<H>(&self, hasher: &mut H) where H: Hasher {
         self.guards.hash(hasher);
         self.robot_position.hash(hasher);
+        self.robot_outside.hash(hasher);
     }
 }
 
