@@ -2,136 +2,13 @@ use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 
+use crate::singlemaze::{Direction, SingleMaze};
+
 #[derive(Clone)]
-enum Direction {
-    North,
-    East,
-    South,
-    West,
-}
-
-impl Direction {
-    fn from_char(input_char: char) -> Self {
-        match input_char {
-            'N' => Self::North,
-            'E' => Self::East,
-            'S' => Self::South,
-            'W' => Self::West,
-            _ => panic!("Invalid input string for Direction"),
-        }
-    }
-
-    fn reverse(&self) -> Self {
-        match self {
-            Self::North => Self::South,
-            Self::East => Self::West,
-            Self::South => Self::North,
-            Self::West => Self:: East,
-        }
-    }
-
-    fn to_position_change(&self, columns: usize) -> isize {
-        match self {
-            Self::North => -(columns as isize),
-            Self::East => 1,
-            Self::South => columns as isize,
-            Self::West => -1,
-        }
-    }
-}
-
-struct Guard {
-    starting_position: usize,
-    patrol_path_size: usize,
-    initial_direction: Direction,
-    steps_to_starting_position: usize,
-    reversed_direction: bool,
-}
-
-impl Guard {
-    fn new(starting_position: usize, patrol_path_size: usize, initial_direction: Direction) -> Self {
-        Self {
-            starting_position,
-            patrol_path_size,
-            initial_direction,
-            steps_to_starting_position: 0,
-            reversed_direction: false,
-        }
-    }
-
-    fn step(&mut self) {
-        if self.patrol_path_size > 1 {
-            if self.steps_to_starting_position == 0 {
-                self.reversed_direction = false;
-            }
-            else if self.steps_to_starting_position == self.patrol_path_size - 1 {
-                self.reversed_direction = true;
-            }
-            if self.reversed_direction {
-                self.steps_to_starting_position -= 1;
-            }
-            else {
-                self.steps_to_starting_position += 1;
-            }
-        }
-    }
-}
-
-struct SingleMaze {
-    rows: usize,
-    columns: usize,
-    layout: Vec<bool>, // false means wall, true means open
-    guards: Vec<Guard>,
-    robot_position: usize,
-}
-
-impl SingleMaze {
-    fn from_lines(lines: &mut impl Iterator<Item = String>) -> Self {
-        let line_one = lines.next().unwrap();
-        let mut line_one_split = line_one.split(' ').map(|n| n.parse::<usize>().unwrap());
-        let rows = line_one_split.next().unwrap();
-        let columns = line_one_split.next().unwrap();
-        let mut layout = vec![];
-        let mut initial_position = 0;
-        for row in 0..rows {
-            for (column, char_as_str) in lines.next().unwrap().split(' ').enumerate() {
-                match char_as_str.chars().next().unwrap() {
-                    '#' => layout.push(false),
-                    '.' => layout.push(true),
-                    'X' => {
-                        initial_position = row * columns + column;
-                        layout.push(true);
-                    },
-                    _ => panic!("Unexpected character"),
-                }
-            }
-        }
-        let number_guards = lines.next().unwrap().parse::<usize>().unwrap();
-        let mut guards = vec![];
-        for _ in 0..number_guards {
-            let line_guard = lines.next().unwrap();
-            let mut line_guard_split = line_guard.split(' ');
-            let row = line_guard_split.next().unwrap().parse::<usize>().unwrap();
-            let column = line_guard_split.next().unwrap().parse::<usize>().unwrap();
-            let patrol_path_size = line_guard_split.next().unwrap().parse::<usize>().unwrap();
-            let direction_str = line_guard_split.next().unwrap();
-            guards.push(
-                Guard::new(row * columns + column, patrol_path_size, Direction::from_char(direction_str.chars().next().unwrap()))
-            )
-        }
-        SingleMaze {
-            rows: rows,
-            columns: columns,
-            layout: layout,
-            guards,
-            robot_position: initial_position
-        }
-    }
-}
-
 pub struct Maze {
     maze_one: SingleMaze,
     maze_two: SingleMaze,
+    solution: Vec<Direction>,
 }
 
 impl Maze {
@@ -141,14 +18,85 @@ impl Maze {
         let mut lines = io::BufReader::new(file).lines().map(|l| l.unwrap());
         let maze_one = SingleMaze::from_lines(&mut lines);
         let maze_two = SingleMaze::from_lines(&mut lines);
-        Maze { maze_one, maze_two}
+        Maze { maze_one, maze_two, solution: vec![]}
     }
 
-    pub fn write_solution<P>(&self, output_path: P) -> std::io::Result<()>
+    fn solve(&mut self) {
+        let mut to_explore_next = vec![self.clone()];
+        for _ in 0..1000 {
+            let to_explore = to_explore_next.clone();
+            to_explore_next = vec![];
+            for mut maze in to_explore.into_iter() {
+                let mut maze1 = maze.clone();
+                if maze1.step(&Direction::East) {
+                    if maze1.won() {
+                        self.solution = maze1.solution;
+                        return;
+                    }
+                    else {
+                        to_explore_next.push(maze1);
+                    }
+                }
+                let mut maze2 = maze.clone();
+                if maze2.step(&Direction::North) {
+                    if maze2.won() {
+                        self.solution = maze2.solution;
+                        return;
+                    }
+                    else {
+                        to_explore_next.push(maze2);
+                    }
+                }
+                let mut maze3 = maze.clone();
+                if maze3.step(&Direction::South) {
+                    if maze3.won() {
+                        self.solution = maze3.solution;
+                        return;
+                    }
+                    else {
+                        to_explore_next.push(maze3);
+                    }
+                }
+                if maze.step(&Direction::West) {
+                    if maze.won() {
+                        self.solution = maze.solution;
+                        return;
+                    }
+                    else {
+                        to_explore_next.push(maze);
+                    }
+                }
+            }
+        }
+    }
+
+    fn step(&mut self, direction: &Direction) -> bool {
+        let one = self.maze_one.step(direction);
+        let two = self.maze_two.step(direction);
+        self.solution.push(direction.clone());
+        one && two
+    }
+
+    fn won(&self) -> bool {
+        self.maze_one.robot_outside && self.maze_two.robot_outside
+    }
+
+    pub fn write_solution<P>(&mut self, output_path: P) -> std::io::Result<()>
     where P: AsRef<Path> {
-        let result = " ";
+        self.solve();
         let mut output_file = File::create(output_path)?;
-        output_file.write_all(result.to_string().as_bytes())?;
+        let solution_length = self.solution.len();
+        if solution_length == 0 {
+            output_file.write_all("-1".to_string().as_bytes())?;
+        }
+        else {
+            let mut line_one = solution_length.to_string();
+            line_one.push_str("\n");
+            output_file.write_all(line_one.as_bytes())?;
+            let solution_vec: Vec<String> = self.solution.iter().map(|d| d.to_char().to_string()).collect();
+            let solution = solution_vec.join("\n");
+            output_file.write_all(solution.as_bytes())?;
+        }
         Ok(())
     }
 }
