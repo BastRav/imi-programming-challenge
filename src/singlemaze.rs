@@ -50,6 +50,7 @@ pub struct Guard {
 impl Hash for Guard {
     fn hash<H>(&self, hasher: &mut H) where H: Hasher {
         self.position.hash(hasher);
+        self.reversed_direction.hash(hasher);
     }
 }
 
