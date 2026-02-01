@@ -1,6 +1,8 @@
 use std::hash::{Hash, Hasher};
 
-#[derive(Clone, PartialEq)]
+use strum_macros::EnumIter;
+
+#[derive(EnumIter, Clone, PartialEq)]
 pub enum Direction {
     North,
     East,
@@ -39,73 +41,70 @@ impl Direction {
 }
 
 #[derive(Clone)]
-pub struct Guard {
+struct GuardState {
     position: usize,
-    patrol_path_size: usize,
-    movement: isize,
-    steps_to_starting_position: usize,
     reversed_direction: bool,
+    steps_to_starting_position: usize,
 }
 
-impl Hash for Guard {
-    fn hash<H>(&self, hasher: &mut H) where H: Hasher {
-        self.position.hash(hasher);
-        self.reversed_direction.hash(hasher);
+impl Hash for GuardState {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.position.hash(state);
+        self.steps_to_starting_position.hash(state);
     }
+}
+
+pub struct Guard {
+    patrol_path_size: usize,
+    movement: isize,
 }
 
 impl Guard {
-    fn new(starting_position: usize, patrol_path_size: usize, movement: isize) -> Self {
+    fn new(patrol_path_size: usize, movement: isize) -> Self {
         Self {
-            position: starting_position,
             patrol_path_size,
             movement,
-            steps_to_starting_position: 0,
-            reversed_direction: false,
         }
     }
 
-    fn step(&mut self) -> usize {
-        if self.steps_to_starting_position == 0 {
-            self.reversed_direction = false;
+    fn step(&self, state: &GuardState) -> GuardState {
+        let mut new_state = state.clone();
+        if state.steps_to_starting_position == 0 {
+            new_state.reversed_direction = false;
         }
-        else if self.steps_to_starting_position == self.patrol_path_size - 1 {
-            self.reversed_direction = true;
+        else if state.steps_to_starting_position == self.patrol_path_size - 1 {
+            new_state.reversed_direction = true;
         }
-        let mut position_isize = self.position as isize;
-        if self.reversed_direction {
-            self.steps_to_starting_position -= 1;
+        let mut position_isize = new_state.position as isize;
+        if new_state.reversed_direction {
+            new_state.steps_to_starting_position -= 1;
             position_isize -= self.movement;
         }
         else {
-            self.steps_to_starting_position += 1;
+            new_state.steps_to_starting_position += 1;
             position_isize += self.movement;
         }
-        self.position = position_isize as usize;
-        self.position
+        new_state.position = position_isize as usize;
+        new_state
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash)]
+pub struct SingleMazeState {
+    guards_states: Vec<GuardState>,
+    robot_position: usize,
+    pub robot_outside: bool,
+}
+
 pub struct SingleMaze {
     columns: usize,
     layout: Vec<bool>, // false means wall, true means open
     guards: Vec<Guard>,
-    robot_position: usize,
-    pub robot_outside: bool,
     exits: Vec<(usize, Direction)>,
 }
 
-impl Hash for SingleMaze {
-    fn hash<H>(&self, hasher: &mut H) where H: Hasher {
-        self.guards.hash(hasher);
-        self.robot_position.hash(hasher);
-        self.robot_outside.hash(hasher);
-    }
-}
-
 impl SingleMaze {
-    pub fn from_lines(lines: &mut impl Iterator<Item = String>) -> Self {
+    pub fn from_lines(lines: &mut impl Iterator<Item = String>) -> (Self, SingleMazeState) {
         let line_one = lines.next().unwrap();
         let mut line_one_split = line_one.split(' ').map(|n| n.parse::<usize>().unwrap());
         let rows = line_one_split.next().unwrap();
@@ -140,6 +139,7 @@ impl SingleMaze {
         }
         let number_guards = lines.next().unwrap().parse::<usize>().unwrap();
         let mut guards = vec![];
+        let mut guards_states = vec![];
         for _ in 0..number_guards {
             let line_guard = lines.next().unwrap();
             let mut line_guard_split = line_guard.split(' ');
@@ -148,50 +148,61 @@ impl SingleMaze {
             let patrol_path_size = line_guard_split.next().unwrap().parse::<usize>().unwrap();
             let direction_str = line_guard_split.next().unwrap();
             let direction = Direction::from_char(direction_str.chars().next().unwrap());
-            guards.push(
-                Guard::new(row * columns + column, patrol_path_size, direction.to_position_change(columns))
-            );
+            let guard = Guard::new(patrol_path_size, direction.to_position_change(columns));
+            let state = GuardState {
+                position: row * columns + column,
+                reversed_direction: false,
+                steps_to_starting_position: 0,
+            };
+            guards.push(guard);
+            guards_states.push(state);
         }
-        SingleMaze {
+        let state = SingleMazeState {
+            robot_position: initial_position,
+            robot_outside: false,
+            guards_states: guards_states,
+        };
+        let maze = SingleMaze {
             columns: columns,
             layout: layout,
             guards,
-            robot_position: initial_position,
-            robot_outside: false,
             exits,
-        }
+        };
+        (maze, state)
     }
 
-    pub fn step(&mut self, direction: &Direction) -> bool {
-        if self.robot_outside {
+    pub fn step(&self, state: &SingleMazeState, direction: &Direction) -> (bool, SingleMazeState) {
+        let mut new_state = state.clone();
+        if state.robot_outside {
             // already won
-            return true;
+            return (true, new_state);
         }
         for (position_exit, direction_exit) in self.exits.iter() {
-            if self.robot_position == *position_exit && direction == direction_exit {
+            if state.robot_position == *position_exit && direction == direction_exit {
                 // it's a win
-                self.robot_outside = true;
-                return true;
+                new_state.robot_outside = true;
+                return (true, new_state);
             }
         }
         let robot_move = direction.to_position_change(self.columns);
-        let new_robot_position = (self.robot_position as isize + robot_move) as usize;
-        for guard in self.guards.iter_mut(){
-            let guard_position = guard.position;
-            let new_guard_position = guard.step();
-            if new_guard_position == new_robot_position || (guard_position == new_robot_position && new_guard_position == self.robot_position) {
+        let new_robot_position = (state.robot_position as isize + robot_move) as usize;
+        for (index_guard, guard) in self.guards.iter().enumerate(){
+            let guard_state = &state.guards_states[index_guard];
+            let new_guard_state = guard.step(guard_state);
+            if new_guard_state.position == new_robot_position || (guard_state.position == new_robot_position && new_guard_state.position == state.robot_position) {
                 // caught by a guard
-                return false;
+                return (false, new_state);
             }
+            new_state.guards_states[index_guard] = new_guard_state;
         }
         if self.layout[new_robot_position] {
             // move is possible
-            self.robot_position = new_robot_position;
-            return true;
+            new_state.robot_position = new_robot_position;
+            return (true, new_state);
         }
         else {
             // hit a wall, it's allowed but you do not move
-            return true;
+            return (true, new_state);
         }
     }
 }

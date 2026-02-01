@@ -4,106 +4,92 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::hash::{Hash, DefaultHasher, Hasher};
 
-use crate::singlemaze::{Direction, SingleMaze};
+use strum::IntoEnumIterator;
+
+use crate::singlemaze::{Direction, SingleMaze, SingleMazeState};
 
 #[derive(Clone)]
-pub struct Maze {
-    maze_one: SingleMaze,
-    maze_two: SingleMaze,
+pub struct MazeState {
+    maze_one_state: SingleMazeState,
+    maze_two_state: SingleMazeState,
     solution: Vec<Direction>,
 }
 
-impl Hash for Maze {
-    fn hash<H>(&self, hasher: &mut H) where H: Hasher {
-        self.maze_one.hash(hasher);
-        self.maze_two.hash(hasher);
+impl Hash for MazeState {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.maze_one_state.hash(state);
+        self.maze_two_state.hash(state);
     }
 }
 
-impl Maze {
-    pub fn new<P>(path: P) -> Self
-    where P: AsRef<Path> {
-        let file = File::open(path).unwrap();
-        let mut lines = io::BufReader::new(file).lines().map(|l| l.unwrap());
-        let maze_one = SingleMaze::from_lines(&mut lines);
-        let maze_two = SingleMaze::from_lines(&mut lines);
-        Maze { maze_one, maze_two, solution: vec![]}
-    }
-
+impl MazeState {
     fn get_hash(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
         hasher.finish()
     }
 
-    fn solve(&mut self) {
+    fn won(&self) -> bool {
+        self.maze_one_state.robot_outside && self.maze_two_state.robot_outside
+    }
+}
+
+pub struct Maze {
+    maze_one: SingleMaze,
+    maze_two: SingleMaze,
+}
+
+impl Maze {
+    pub fn new<P>(path: P) -> (Self, MazeState)
+    where P: AsRef<Path> {
+        let file = File::open(path).unwrap();
+        let mut lines = io::BufReader::new(file).lines().map(|l| l.unwrap());
+        let (maze_one, maze_one_state) = SingleMaze::from_lines(&mut lines);
+        let (maze_two, maze_two_state) = SingleMaze::from_lines(&mut lines);
+        let maze = Maze { maze_one, maze_two};
+        let maze_state = MazeState {maze_one_state, maze_two_state, solution: vec![]};
+        (maze, maze_state)
+    }
+
+    fn solve(&self, state: &MazeState) -> Vec<Direction> {
         let mut hashes_seen = HashSet::new();
-        hashes_seen.insert(self.get_hash());
-        let mut to_explore_next = vec![self.clone()];
+        hashes_seen.insert(state.get_hash());
+        let mut to_explore_next = vec![state.clone()];
         for _ in 0..1000 {
             if to_explore_next.len() == 0 {break;}
             let to_explore = to_explore_next.clone();
             to_explore_next = vec![];
-            for mut maze in to_explore.into_iter() {
-                let mut maze1 = maze.clone();
-                if maze1.step(&Direction::East) {
-                    if maze1.won() {
-                        self.solution = maze1.solution;
-                        return;
-                    }
-                    else if hashes_seen.insert(maze1.get_hash()) {
-                        to_explore_next.push(maze1);
-                    }
-                }
-                let mut maze2 = maze.clone();
-                if maze2.step(&Direction::North) {
-                    if maze2.won() {
-                        self.solution = maze2.solution;
-                        return;
-                    }
-                    else if hashes_seen.insert(maze2.get_hash()){
-                        to_explore_next.push(maze2);
-                    }
-                }
-                let mut maze3 = maze.clone();
-                if maze3.step(&Direction::South) {
-                    if maze3.won() {
-                        self.solution = maze3.solution;
-                        return;
-                    }
-                    else if hashes_seen.insert(maze3.get_hash()){
-                        to_explore_next.push(maze3);
-                    }
-                }
-                if maze.step(&Direction::West) {
-                    if maze.won() {
-                        self.solution = maze.solution;
-                        return;
-                    }
-                    else if hashes_seen.insert(maze.get_hash()){
-                        to_explore_next.push(maze);
+            for maze_state in to_explore.into_iter() {
+                for direction in Direction::iter() {
+                    let (allowed, new_state) = self.step(&maze_state, &direction);
+                    if allowed {
+                        if new_state.won() {
+                            return new_state.solution;
+                        }
+                        else if hashes_seen.insert(new_state.get_hash()) {
+                            to_explore_next.push(new_state);
+                        }
                     }
                 }
             }
         }
+        vec![]
     }
 
-    fn step(&mut self, direction: &Direction) -> bool {
-        let one = self.maze_one.step(direction);
-        let two = self.maze_two.step(direction);
-        self.solution.push(direction.clone());
-        one && two
+    fn step(&self, state: &MazeState, direction: &Direction) -> (bool, MazeState) {
+        let mut solution = state.solution.clone();
+        solution.push(direction.clone());
+        let (one, maze_one_state) = self.maze_one.step(&state.maze_one_state, direction);
+        let (two, maze_two_state) = self.maze_two.step(&state.maze_two_state, direction);
+        let new_state = MazeState {maze_one_state, maze_two_state, solution};
+        (one && two, new_state)
     }
 
-    fn won(&self) -> bool {
-        self.maze_one.robot_outside && self.maze_two.robot_outside
-    }
-
-    pub fn write_solution<P>(&mut self, output_path: P) -> std::io::Result<()>
+    pub fn write_solution<P>(&self, state:&MazeState, output_path: P) -> std::io::Result<()>
     where P: AsRef<Path> {
-        self.solve();
+        let solution = self.solve(state);
         let mut output_file = File::create(output_path)?;
-        let solution_length = self.solution.len();
+        let solution_length = solution.len();
         if solution_length == 0 {
             output_file.write_all("-1".to_string().as_bytes())?;
         }
@@ -111,7 +97,7 @@ impl Maze {
             let mut line_one = solution_length.to_string();
             line_one.push_str("\n");
             output_file.write_all(line_one.as_bytes())?;
-            let solution_vec: Vec<String> = self.solution.iter().map(|d| d.to_char().to_string()).collect();
+            let solution_vec: Vec<String> = solution.iter().map(|d| d.to_char().to_string()).collect();
             let solution = solution_vec.join("\n");
             output_file.write_all(solution.as_bytes())?;
         }
