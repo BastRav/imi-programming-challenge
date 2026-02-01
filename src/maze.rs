@@ -29,10 +29,6 @@ impl MazeState {
         self.hash(&mut hasher);
         hasher.finish()
     }
-
-    fn won(&self) -> bool {
-        self.maze_one_state.robot_outside && self.maze_two_state.robot_outside
-    }
 }
 
 pub struct Maze {
@@ -48,7 +44,7 @@ impl Maze {
         let (maze_one, maze_one_state) = SingleMaze::from_lines(&mut lines);
         let (maze_two, maze_two_state) = SingleMaze::from_lines(&mut lines);
         let maze = Maze { maze_one, maze_two};
-        let maze_state = MazeState {maze_one_state, maze_two_state, solution: vec![]};
+        let maze_state = MazeState {maze_one_state, maze_two_state, solution: vec![],};
         (maze, maze_state)
     }
 
@@ -56,35 +52,44 @@ impl Maze {
         let mut hashes_seen = HashSet::new();
         hashes_seen.insert(state.get_hash());
         let mut to_explore_next = vec![state.clone()];
+        let mut best_best_case = usize::MAX;
+        let mut best_sum = usize::MAX;
         for _ in 0..1000 {
             // println!("{:#?}", to_explore_next);
-            if to_explore_next.len() == 0 {break;}
+            if to_explore_next.len() == 0 {
+                break;
+            }
             let to_explore = to_explore_next.clone();
             to_explore_next = vec![];
             for maze_state in to_explore.into_iter() {
                 let next_moves_one = self.maze_one.next_moves(&maze_state.maze_one_state);
                 let next_moves_two = self.maze_two.next_moves(&maze_state.maze_two_state);
                 // println!("{:#?}", next_moves_one.iter().map(|n| (n.0, n.1.0)).collect::<Vec<(&Direction, bool)>>());
-                let mut possible_moves = vec![];
-                let mut best_moves = vec![];
                 for direction in Direction::iter() {
                     match next_moves_one.get(&direction) {
-                        Some((best_one, state_one)) => {
+                        Some(state_one) => {
                             match next_moves_two.get(&direction) {
-                                Some((best_two, state_two)) => {
-                                    let mut solution = maze_state.solution.clone();
-                                    solution.push(direction);
-                                    let new_state = MazeState {
-                                        maze_one_state: state_one.clone(),
-                                        maze_two_state: state_two.clone(),
-                                        solution
-                                    };
-                                    if *best_one && *best_two {
-                                        if new_state.won() {return new_state.solution}
-                                        best_moves.push(new_state);
+                                Some(state_two) => {
+                                    let best_case = state_one.depth_to_solution.max(state_two.depth_to_solution);
+                                    let sum = state_one.depth_to_solution + state_two.depth_to_solution;
+                                    if best_case < best_best_case {
+                                        best_best_case = best_case;
                                     }
-                                    else {
-                                        possible_moves.push(new_state);
+                                    if sum < best_sum {
+                                        best_sum = sum;
+                                    }
+                                    if best_case <= best_best_case + 2 && sum <= best_sum + 2 {
+                                        let mut solution = maze_state.solution.clone();
+                                        solution.push(direction);
+                                        let new_state = MazeState {
+                                            maze_one_state: state_one.clone(),
+                                            maze_two_state: state_two.clone(),
+                                            solution,
+                                        };
+                                        if sum == 0 {
+                                            return new_state.solution.clone();
+                                        }
+                                        to_explore_next.push(new_state);
                                     }
                                 },
                                 None => (),
@@ -92,14 +97,6 @@ impl Maze {
                         },
                         None => (),
                     }
-                }
-                if best_moves.len() == 0 {
-                    // println!("Possible moves {:#?}", possible_moves);
-                    to_explore_next.append(&mut possible_moves);
-                }
-                else {
-                    // println!("Best moves {:#?}", best_moves);
-                    to_explore_next.append(&mut best_moves);
                 }
             }
         }

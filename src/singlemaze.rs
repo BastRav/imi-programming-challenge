@@ -107,7 +107,7 @@ pub struct SingleMazeState {
     solutions: HashSet<Direction>,
     solutions_computed: bool,
     depth: usize,
-    depth_to_solution: usize,
+    pub depth_to_solution: usize,
 }
 
 impl Hash for SingleMazeState {
@@ -227,7 +227,7 @@ impl SingleMaze {
         let mut solutions_pending: Vec<(usize, NodeIndex)> = vec![];
         for _ in 0..1000 {
             depth += 1;
-            if to_explore_next.len() == 0 {break;}
+            if to_explore_next.len() == 0 && solutions_pending.len() == 0 {break;}
             let to_explore = to_explore_next.clone();
             to_explore_next = vec![];
             let mut new_graph = self.graph.clone();
@@ -306,17 +306,19 @@ impl SingleMaze {
                         let nodes_to_visit = nodes_to_visit_next.clone();
                         nodes_to_visit_next = HashSet::new();
                         for node in nodes_to_visit.into_iter() {
-                            let node_weight = self.graph.node_weight(node).unwrap();
+                            let node_weight = new_graph.node_weight(node).unwrap();
                             let node_depth = node_weight.depth;
                             let node_depth_to_solution = node_weight.depth_to_solution;
                             for edge_ref in self.graph.edges_directed(node, Incoming){
                                 let parent_node_index = edge_ref.source();
-                                let parent_node = new_graph.node_weight_mut(parent_node_index).unwrap();
-                                if parent_node.depth < node_depth {
-                                    parent_node.solutions_computed = true;
-                                    parent_node.depth_to_solution = node_depth_to_solution + 1;
-                                    parent_node.solutions.insert(edge_ref.weight().clone());
-                                    nodes_to_visit_next.insert(parent_node_index);
+                                if already_seen_this_time.contains(&parent_node_index) {
+                                    let parent_node = new_graph.node_weight_mut(parent_node_index).unwrap();
+                                    if parent_node.depth + 1 == node_depth {
+                                        parent_node.solutions_computed = true;
+                                        parent_node.depth_to_solution = node_depth_to_solution + 1;
+                                        parent_node.solutions.insert(edge_ref.weight().clone());
+                                        nodes_to_visit_next.insert(parent_node_index);
+                                    }
                                 }
                             }
                         }
@@ -329,14 +331,14 @@ impl SingleMaze {
         }
     }
 
-    pub fn next_moves(&mut self, state: &SingleMazeState) -> HashMap<Direction, (bool, SingleMazeState)> {
+    pub fn next_moves(&mut self, state: &SingleMazeState) -> HashMap<Direction, SingleMazeState> {
         let mut next_moves = HashMap::new();
         let node_index = self.hashes_seen[state];
         let node = self.graph.node_weight_mut(node_index).unwrap();
         if node.robot_outside {
             // edges cannot be used here
             for direction in Direction::iter(){
-                next_moves.insert(direction, (true, node.clone()));
+                next_moves.insert(direction, node.clone());
             }
             return next_moves;
         }
@@ -349,18 +351,16 @@ impl SingleMaze {
             // no solution, don't bother
             return next_moves;
         }
-        for edge_ref in self.graph.edges(node_index) {
+        for edge_ref in self.graph.clone().edges(node_index) {
             let direction = edge_ref.weight();
             let new_node_index = edge_ref.target();
-            let new_state = self.graph.node_weight(new_node_index).unwrap();
-            let mut is_best = false;
-            for best_direction in same_node.solutions.iter() {
-                if best_direction == direction {
-                    is_best = true;
-                    break;
-                }
+            let new_node = self.graph.node_weight_mut(new_node_index).unwrap();
+            if !new_node.solutions_computed {
+                new_node.depth = 1;
+                self.solve(new_node_index);
             }
-            next_moves.insert(direction.clone(), (is_best, new_state.clone()));
+            let new_state = self.graph.node_weight(new_node_index).unwrap();
+            next_moves.insert(direction.clone(), new_state.clone());
         }
         next_moves
     }
