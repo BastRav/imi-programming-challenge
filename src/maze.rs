@@ -41,6 +41,7 @@ impl Maze {
         hashes_seen.insert(self.get_hash());
         let mut to_explore_next = vec![self.clone()];
         for _ in 0..1000 {
+            if to_explore_next.len() == 0 {break;}
             let to_explore = to_explore_next.clone();
             to_explore_next = vec![];
             for mut maze in to_explore.into_iter() {
