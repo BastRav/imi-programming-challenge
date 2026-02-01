@@ -52,7 +52,7 @@ impl Maze {
         (maze, maze_state)
     }
 
-    fn solve(&self, state: &MazeState) -> Vec<Direction> {
+    fn solve(&mut self, state: &MazeState) -> Vec<Direction> {
         let mut hashes_seen = HashSet::new();
         hashes_seen.insert(state.get_hash());
         let mut to_explore_next = vec![state.clone()];
@@ -106,7 +106,7 @@ impl Maze {
         vec![]
     }
 
-    pub fn write_solution<P>(&self, state:&MazeState, output_path: P) -> std::io::Result<()>
+    pub fn write_solution<P>(&mut self, state:&MazeState, output_path: P) -> std::io::Result<()>
     where P: AsRef<Path> {
         let solution = self.solve(state);
         let mut output_file = File::create(output_path)?;

@@ -1,8 +1,10 @@
-use std::hash::{Hash, Hasher, DefaultHasher};
+use std::hash::{Hash, Hasher};
 use std::collections::{HashMap, HashSet};
 
+use petgraph::Direction::Incoming;
 use strum_macros::EnumIter;
 use strum::IntoEnumIterator;
+use petgraph::{graph::{DiGraph, NodeIndex}, visit::EdgeRef};
 
 #[derive(EnumIter, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Direction {
@@ -56,6 +58,12 @@ impl Hash for GuardState {
     }
 }
 
+impl PartialEq for GuardState {
+    fn eq(&self, other: &Self) -> bool {
+        self.position == other.position && self.reversed_direction == other.reversed_direction
+    }
+}
+
 pub struct Guard {
     patrol_path_size: usize,
     movement: isize,
@@ -96,7 +104,9 @@ pub struct SingleMazeState {
     guards_states: Vec<GuardState>,
     robot_position: usize,
     pub robot_outside: bool,
-    solution: Direction,
+    solutions: HashSet<Direction>,
+    solutions_computed: bool,
+    depth: usize,
 }
 
 impl Hash for SingleMazeState {
@@ -107,11 +117,24 @@ impl Hash for SingleMazeState {
     }
 }
 
+impl PartialEq for SingleMazeState {
+    fn eq(&self, other: &Self) -> bool {
+        self.guards_states == other.guards_states && self.robot_position == other.robot_position && self.robot_outside == other.robot_outside
+    }
+}
+
+impl Eq for SingleMazeState {}
+
 impl SingleMazeState {
-    fn get_hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        hasher.finish()
+    fn new(guards_states: Vec<GuardState>, robot_position: usize, robot_outside: bool, depth: usize) -> Self {
+        Self {
+            guards_states,
+            robot_position,
+            robot_outside,
+            solutions: HashSet::new(),
+            solutions_computed: false,
+            depth,
+        }
     }
 }
 
@@ -120,6 +143,8 @@ pub struct SingleMaze {
     layout: Vec<bool>, // false means wall, true means open
     guards: Vec<Guard>,
     exits: Vec<(usize, Direction)>,
+    hashes_seen: HashMap<SingleMazeState, NodeIndex>,
+    graph: DiGraph<SingleMazeState, Direction>,
 }
 
 impl SingleMaze {
@@ -176,75 +201,178 @@ impl SingleMaze {
             guards.push(guard);
             guards_states.push(state);
         }
-        let state = SingleMazeState {
-            robot_position: initial_position,
-            robot_outside: false,
-            guards_states: guards_states,
-            solution: Direction::East,
-        };
+        let state = SingleMazeState::new(guards_states, initial_position,false, 0);
+        let mut hashes_seen = HashMap::new();
+        let mut graph = DiGraph::new();
+        let origin = graph.add_node(state.clone());
+        hashes_seen.insert(state.clone(), origin);
         let maze = SingleMaze {
             columns: columns,
             layout: layout,
             guards,
             exits,
+            hashes_seen,
+            graph,
         };
         (maze, state)
     }
 
-    pub fn solve(&self, state: &SingleMazeState) -> Vec<Direction> {
-        let mut hashes_seen = HashSet::new();
-        hashes_seen.insert(state.get_hash());
-        let mut to_explore_next = vec![state.clone()];
-        for k in 0..1000 {
+    fn solve(&mut self, node_index: NodeIndex) {
+        let mut to_explore_next = vec![node_index];
+        let mut depth = self.graph.node_weight(node_index).unwrap().depth;
+        let mut already_seen_this_time = HashSet::new();
+        already_seen_this_time.insert(node_index);
+        for _ in 0..1000 {
+            depth += 1;
             if to_explore_next.len() == 0 {break;}
             let to_explore = to_explore_next.clone();
             to_explore_next = vec![];
-            let mut solutions = vec![];
-            for maze_state in to_explore.into_iter() {
-                for direction in Direction::iter() {
-                    let (allowed, mut new_state) = self.step(&maze_state, &direction);
-                    if k==0 {
-                        new_state.solution = direction.clone();
-                    }
-                    if allowed {
-                        if new_state.robot_outside {
-                            solutions.push(new_state.solution);
+            let mut new_graph = self.graph.clone();
+            let mut solutions_found = vec![];
+            for node_index in to_explore.into_iter() {
+                let maze_state = self.graph.node_weight(node_index).unwrap();
+                if maze_state.solutions_computed {
+                    for edge_ref in self.graph.edges(node_index){
+                        let target_index = edge_ref.target();
+                        let node_in_new_graph = new_graph.node_weight_mut(target_index).unwrap();
+                        if already_seen_this_time.insert(target_index) {
+                            // first time we see this, in the current search
+                            // update depth because not the same starting point
+                            node_in_new_graph.depth = depth;
                         }
-                        else if hashes_seen.insert(new_state.get_hash()) {
-                            to_explore_next.push(new_state);
+                        if node_in_new_graph.robot_outside {
+                            solutions_found.push(target_index);
+                        }
+                        let direction = edge_ref.weight();
+                        let mut is_best = false;
+                        for best_direction in maze_state.solutions.iter() {
+                            if best_direction == direction {
+                                is_best = true;
+                                break;
+                            }
+                        }
+                        if is_best {
+                            to_explore_next.push(target_index);
+                        }
+                    }
+                }
+                else {
+                    for direction in Direction::iter() {
+                        let (allowed, new_state) = self.step(maze_state, &direction);
+                        if allowed {
+                            let new_index;
+                            let already_seen = self.hashes_seen.contains_key(&new_state);
+                            let mut already_seen_this = true;
+                            if already_seen {
+                                new_index = self.hashes_seen[&new_state];
+                            }
+                            else {
+                                new_index = new_graph.add_node(new_state.clone());
+                                self.hashes_seen.insert(new_state.clone(), new_index);
+                            }
+                            if already_seen_this_time.insert(new_index) {
+                                // first time we see this, in the current search
+                                // update depth, not the same starting point
+                                let node_in_new_graph = new_graph.node_weight_mut(new_index).unwrap();
+                                node_in_new_graph.depth = depth;
+                                already_seen_this = false;
+                            }
+                            let mut edge_exists = false;
+                            for edge_ref in new_graph.edges_connecting(node_index, new_index) {
+                                if edge_ref.weight() == &direction {
+                                    edge_exists = true;
+                                    break;
+                                }
+                            }
+                            if !edge_exists {
+                                new_graph.add_edge(node_index, new_index, direction);
+                            }
+                            if new_state.robot_outside {
+                                solutions_found.push(new_index);
+                                let new_node = new_graph.node_weight_mut(new_index).unwrap();
+                                new_node.solutions_computed = true;
+                                for direction in Direction::iter() {
+                                    new_node.solutions.insert(direction);
+                                }
+                            }
+                            else if !already_seen_this {
+                                to_explore_next.push(new_index);
+                            }
                         }
                     }
                 }
             }
-            if solutions.len() > 0 {return solutions;}
+            self.graph = new_graph;
+            if solutions_found.len() > 0 {
+                // println!("Solution found");
+                let mut new_graph = self.graph.clone();
+                for solution in solutions_found.into_iter() {
+                    let mut nodes_to_visit_next = HashSet::new();
+                    nodes_to_visit_next.insert(solution);
+                    loop {
+                        let nodes_to_visit = nodes_to_visit_next.clone();
+                        nodes_to_visit_next = HashSet::new();
+                        for node in nodes_to_visit.into_iter() {
+                            let node_depth = self.graph.node_weight(node).unwrap().depth;
+                            for edge_ref in self.graph.edges_directed(node, Incoming){
+                                let parent_node_index = edge_ref.source();
+                                let parent_node = new_graph.node_weight_mut(parent_node_index).unwrap();
+                                if parent_node.depth < node_depth {
+                                    parent_node.solutions_computed = true;
+                                    parent_node.solutions.insert(edge_ref.weight().clone());
+                                    nodes_to_visit_next.insert(parent_node_index);
+                                }
+                            }
+                        }
+                        if nodes_to_visit_next.len() == 0 {break; }
+                    }
+                }
+                self.graph = new_graph;
+                break;
+            }
         }
-        vec![]
     }
 
-    pub fn next_moves(&self, state: &SingleMazeState) -> HashMap<Direction, (bool, SingleMazeState)> {
+    pub fn next_moves(&mut self, state: &SingleMazeState) -> HashMap<Direction, (bool, SingleMazeState)> {
         let mut next_moves = HashMap::new();
-        let solutions = self.solve(&state);
-        for direction in Direction::iter() {
-            let (allowed, new_state) = self.step(&state, &direction);
-            if allowed {
-                let mut is_best = false;
-                for best_direction in solutions.iter() {
-                    if best_direction == &direction {
-                        is_best = true;
-                    }
-                }
-                next_moves.insert(direction, (is_best, new_state));
+        let node_index = self.hashes_seen[state];
+        let node = self.graph.node_weight_mut(node_index).unwrap();
+        if node.robot_outside {
+            // edges cannot be used here
+            for direction in Direction::iter(){
+                next_moves.insert(direction, (true, node.clone()));
             }
+            return next_moves;
+        }
+        if !node.solutions_computed {
+            node.depth = 0;
+            self.solve(node_index);
+        }
+        let same_node = self.graph.node_weight(node_index).unwrap();
+        if same_node.solutions.len() == 0 {
+            // no solution, don't bother
+            return next_moves;
+        }
+        for edge_ref in self.graph.edges(node_index) {
+            let direction = edge_ref.weight();
+            let new_node_index = edge_ref.target();
+            let new_state = self.graph.node_weight(new_node_index).unwrap();
+            let mut is_best = false;
+            for best_direction in same_node.solutions.iter() {
+                if best_direction == direction {
+                    is_best = true;
+                    break;
+                }
+            }
+            next_moves.insert(direction.clone(), (is_best, new_state.clone()));
         }
         next_moves
     }
 
-    pub fn step(&self, state: &SingleMazeState, direction: &Direction) -> (bool, SingleMazeState) {
+    fn step(&self, state: &SingleMazeState, direction: &Direction) -> (bool, SingleMazeState) {
+        // never call this method if robot is already outside!!!
         let mut new_state = state.clone();
-        if state.robot_outside {
-            // already won
-            return (true, new_state);
-        }
+        new_state.depth += 1;
         for (position_exit, direction_exit) in self.exits.iter() {
             if state.robot_position == *position_exit && direction == direction_exit {
                 // it's a win
