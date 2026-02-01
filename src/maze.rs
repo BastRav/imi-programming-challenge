@@ -3,12 +3,13 @@ use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::hash::{Hash, DefaultHasher, Hasher};
+use std::vec;
 
 use strum::IntoEnumIterator;
 
 use crate::singlemaze::{Direction, SingleMaze, SingleMazeState};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MazeState {
     maze_one_state: SingleMazeState,
     maze_two_state: SingleMazeState,
@@ -56,33 +57,53 @@ impl Maze {
         hashes_seen.insert(state.get_hash());
         let mut to_explore_next = vec![state.clone()];
         for _ in 0..1000 {
+            // println!("{:#?}", to_explore_next);
             if to_explore_next.len() == 0 {break;}
             let to_explore = to_explore_next.clone();
             to_explore_next = vec![];
             for maze_state in to_explore.into_iter() {
+                let next_moves_one = self.maze_one.next_moves(&maze_state.maze_one_state);
+                let next_moves_two = self.maze_two.next_moves(&maze_state.maze_two_state);
+                // println!("{:#?}", next_moves_one.iter().map(|n| (n.0, n.1.0)).collect::<Vec<(&Direction, bool)>>());
+                let mut possible_moves = vec![];
+                let mut best_moves = vec![];
                 for direction in Direction::iter() {
-                    let (allowed, new_state) = self.step(&maze_state, &direction);
-                    if allowed {
-                        if new_state.won() {
-                            return new_state.solution;
-                        }
-                        else if hashes_seen.insert(new_state.get_hash()) {
-                            to_explore_next.push(new_state);
-                        }
+                    match next_moves_one.get(&direction) {
+                        Some((best_one, state_one)) => {
+                            match next_moves_two.get(&direction) {
+                                Some((best_two, state_two)) => {
+                                    let mut solution = maze_state.solution.clone();
+                                    solution.push(direction);
+                                    let new_state = MazeState {
+                                        maze_one_state: state_one.clone(),
+                                        maze_two_state: state_two.clone(),
+                                        solution
+                                    };
+                                    if *best_one && *best_two {
+                                        if new_state.won() {return new_state.solution}
+                                        best_moves.push(new_state);
+                                    }
+                                    else {
+                                        possible_moves.push(new_state);
+                                    }
+                                },
+                                None => (),
+                            }
+                        },
+                        None => (),
                     }
+                }
+                if best_moves.len() == 0 {
+                    // println!("Possible moves {:#?}", possible_moves);
+                    to_explore_next.append(&mut possible_moves);
+                }
+                else {
+                    // println!("Best moves {:#?}", best_moves);
+                    to_explore_next.append(&mut best_moves);
                 }
             }
         }
         vec![]
-    }
-
-    fn step(&self, state: &MazeState, direction: &Direction) -> (bool, MazeState) {
-        let mut solution = state.solution.clone();
-        solution.push(direction.clone());
-        let (one, maze_one_state) = self.maze_one.step(&state.maze_one_state, direction);
-        let (two, maze_two_state) = self.maze_two.step(&state.maze_two_state, direction);
-        let new_state = MazeState {maze_one_state, maze_two_state, solution};
-        (one && two, new_state)
     }
 
     pub fn write_solution<P>(&self, state:&MazeState, output_path: P) -> std::io::Result<()>

@@ -1,8 +1,10 @@
-use std::hash::{Hash, Hasher};
+use std::hash::{Hash, Hasher, DefaultHasher};
+use std::collections::{HashMap, HashSet};
 
 use strum_macros::EnumIter;
+use strum::IntoEnumIterator;
 
-#[derive(EnumIter, Clone, PartialEq)]
+#[derive(EnumIter, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Direction {
     North,
     East,
@@ -40,7 +42,7 @@ impl Direction {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct GuardState {
     position: usize,
     reversed_direction: bool,
@@ -89,11 +91,28 @@ impl Guard {
     }
 }
 
-#[derive(Clone, Hash)]
+#[derive(Clone, Debug)]
 pub struct SingleMazeState {
     guards_states: Vec<GuardState>,
     robot_position: usize,
     pub robot_outside: bool,
+    solution: Direction,
+}
+
+impl Hash for SingleMazeState {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.guards_states.hash(state);
+        self.robot_position.hash(state);
+        self.robot_outside.hash(state);
+    }
+}
+
+impl SingleMazeState {
+    fn get_hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
 }
 
 pub struct SingleMaze {
@@ -161,6 +180,7 @@ impl SingleMaze {
             robot_position: initial_position,
             robot_outside: false,
             guards_states: guards_states,
+            solution: Direction::East,
         };
         let maze = SingleMaze {
             columns: columns,
@@ -169,6 +189,54 @@ impl SingleMaze {
             exits,
         };
         (maze, state)
+    }
+
+    pub fn solve(&self, state: &SingleMazeState) -> Vec<Direction> {
+        let mut hashes_seen = HashSet::new();
+        hashes_seen.insert(state.get_hash());
+        let mut to_explore_next = vec![state.clone()];
+        for k in 0..1000 {
+            if to_explore_next.len() == 0 {break;}
+            let to_explore = to_explore_next.clone();
+            to_explore_next = vec![];
+            let mut solutions = vec![];
+            for maze_state in to_explore.into_iter() {
+                for direction in Direction::iter() {
+                    let (allowed, mut new_state) = self.step(&maze_state, &direction);
+                    if k==0 {
+                        new_state.solution = direction.clone();
+                    }
+                    if allowed {
+                        if new_state.robot_outside {
+                            solutions.push(new_state.solution);
+                        }
+                        else if hashes_seen.insert(new_state.get_hash()) {
+                            to_explore_next.push(new_state);
+                        }
+                    }
+                }
+            }
+            if solutions.len() > 0 {return solutions;}
+        }
+        vec![]
+    }
+
+    pub fn next_moves(&self, state: &SingleMazeState) -> HashMap<Direction, (bool, SingleMazeState)> {
+        let mut next_moves = HashMap::new();
+        let solutions = self.solve(&state);
+        for direction in Direction::iter() {
+            let (allowed, new_state) = self.step(&state, &direction);
+            if allowed {
+                let mut is_best = false;
+                for best_direction in solutions.iter() {
+                    if best_direction == &direction {
+                        is_best = true;
+                    }
+                }
+                next_moves.insert(direction, (is_best, new_state));
+            }
+        }
+        next_moves
     }
 
     pub fn step(&self, state: &SingleMazeState, direction: &Direction) -> (bool, SingleMazeState) {
