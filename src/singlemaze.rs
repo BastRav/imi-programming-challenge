@@ -107,6 +107,7 @@ pub struct SingleMazeState {
     solutions: HashSet<Direction>,
     solutions_computed: bool,
     depth: usize,
+    depth_to_solution: usize,
 }
 
 impl Hash for SingleMazeState {
@@ -134,6 +135,7 @@ impl SingleMazeState {
             solutions: HashSet::new(),
             solutions_computed: false,
             depth,
+            depth_to_solution: 0,
         }
     }
 }
@@ -222,6 +224,7 @@ impl SingleMaze {
         let mut depth = self.graph.node_weight(node_index).unwrap().depth;
         let mut already_seen_this_time = HashSet::new();
         already_seen_this_time.insert(node_index);
+        let mut solutions_pending: Vec<(usize, NodeIndex)> = vec![];
         for _ in 0..1000 {
             depth += 1;
             if to_explore_next.len() == 0 {break;}
@@ -229,31 +232,20 @@ impl SingleMaze {
             to_explore_next = vec![];
             let mut new_graph = self.graph.clone();
             let mut solutions_found = vec![];
+            for solution_pending in solutions_pending.iter_mut(){
+                solution_pending.0 -= 1;
+                if solution_pending.0 == 0 {
+                    solutions_found.push(solution_pending.1);
+                }
+            }
             for node_index in to_explore.into_iter() {
                 let maze_state = self.graph.node_weight(node_index).unwrap();
                 if maze_state.solutions_computed {
-                    for edge_ref in self.graph.edges(node_index){
-                        let target_index = edge_ref.target();
-                        let node_in_new_graph = new_graph.node_weight_mut(target_index).unwrap();
-                        if already_seen_this_time.insert(target_index) {
-                            // first time we see this, in the current search
-                            // update depth because not the same starting point
-                            node_in_new_graph.depth = depth;
-                        }
-                        if node_in_new_graph.robot_outside {
-                            solutions_found.push(target_index);
-                        }
-                        let direction = edge_ref.weight();
-                        let mut is_best = false;
-                        for best_direction in maze_state.solutions.iter() {
-                            if best_direction == direction {
-                                is_best = true;
-                                break;
-                            }
-                        }
-                        if is_best {
-                            to_explore_next.push(target_index);
-                        }
+                    if maze_state.depth_to_solution == 0 {
+                        solutions_found.push(node_index);
+                    }
+                    else {
+                        solutions_pending.push((maze_state.depth_to_solution, node_index));
                     }
                 }
                 else {
@@ -291,6 +283,7 @@ impl SingleMaze {
                                 solutions_found.push(new_index);
                                 let new_node = new_graph.node_weight_mut(new_index).unwrap();
                                 new_node.solutions_computed = true;
+                                new_node.depth_to_solution = 0;
                                 for direction in Direction::iter() {
                                     new_node.solutions.insert(direction);
                                 }
@@ -313,12 +306,15 @@ impl SingleMaze {
                         let nodes_to_visit = nodes_to_visit_next.clone();
                         nodes_to_visit_next = HashSet::new();
                         for node in nodes_to_visit.into_iter() {
-                            let node_depth = self.graph.node_weight(node).unwrap().depth;
+                            let node_weight = self.graph.node_weight(node).unwrap();
+                            let node_depth = node_weight.depth;
+                            let node_depth_to_solution = node_weight.depth_to_solution;
                             for edge_ref in self.graph.edges_directed(node, Incoming){
                                 let parent_node_index = edge_ref.source();
                                 let parent_node = new_graph.node_weight_mut(parent_node_index).unwrap();
                                 if parent_node.depth < node_depth {
                                     parent_node.solutions_computed = true;
+                                    parent_node.depth_to_solution = node_depth_to_solution + 1;
                                     parent_node.solutions.insert(edge_ref.weight().clone());
                                     nodes_to_visit_next.insert(parent_node_index);
                                 }
