@@ -176,13 +176,13 @@ impl SingleMaze {
         }
         let robot_move = direction.to_position_change(self.columns);
         let new_robot_position = (self.robot_position as isize + robot_move) as usize;
-        if self.layout[new_robot_position] {
-            for guard in self.guards.iter_mut(){
-                if guard.position == new_robot_position || guard.step() == new_robot_position {
-                    // caught by a guard
-                    return false;
-                }
+        for guard in self.guards.iter_mut(){
+            if guard.position == new_robot_position || guard.step() == new_robot_position {
+                // caught by a guard
+                return false;
             }
+        }
+        if self.layout[new_robot_position] {
             // move is possible
             self.robot_position = new_robot_position;
             return true;
