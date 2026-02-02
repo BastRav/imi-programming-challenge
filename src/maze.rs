@@ -59,9 +59,10 @@ impl Maze {
         if self.no_exits_in_a_maze {
             return vec![];
         }
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::with_capacity(100_000);
         seen.insert(state.clone());
-        let mut to_explore_next = vec![state.clone()];
+        let mut to_explore_next = Vec::with_capacity(10_000);
+        to_explore_next.push(state.clone());
         for _ in 0..1000 {
             if to_explore_next.len() == 0 {break;}
             let to_explore = std::mem::take(&mut to_explore_next);
