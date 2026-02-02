@@ -171,6 +171,10 @@ impl SingleMaze {
         (maze, state)
     }
 
+    pub fn no_exit(&self) -> bool {
+        self.exits.len() == 0
+    }
+
     pub fn step(&self, state: &SingleMazeState, direction: &Direction) -> (bool, SingleMazeState) {
         let mut new_state = state.clone();
         if state.robot_outside {
