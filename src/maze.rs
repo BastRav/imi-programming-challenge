@@ -59,8 +59,8 @@ impl Maze {
         if self.no_exits_in_a_maze {
             return vec![];
         }
-        let mut hashes_seen = HashSet::new();
-        hashes_seen.insert(state.clone());
+        let mut seen = HashSet::new();
+        seen.insert(state.clone());
         let mut to_explore_next = vec![state.clone()];
         for _ in 0..1000 {
             if to_explore_next.len() == 0 {break;}
@@ -73,7 +73,7 @@ impl Maze {
                         if new_state.won() {
                             return new_state.solution;
                         }
-                        else if hashes_seen.insert(new_state.clone()) {
+                        else if seen.insert(new_state.clone()) {
                             to_explore_next.push(new_state);
                         }
                     }
