@@ -60,7 +60,7 @@ impl Maze {
             let to_explore = std::mem::take(&mut to_explore_next);
             for node in to_explore.into_iter() {
                 for direction in Direction::iter() {
-                    let (allowed, new_node) = self.step(&node, &direction);
+                    let (allowed, new_node) = self.step(&node, direction);
                     if allowed {
                         if new_node.maze_state.won() {
                             return new_node.solution;
@@ -75,11 +75,11 @@ impl Maze {
         vec![]
     }
 
-    fn step(&self, node: &Node, direction: &Direction) -> (bool, Node) {
+    fn step(&self, node: &Node, direction: Direction) -> (bool, Node) {
         let mut solution = node.solution.clone();
-        solution.push(direction.clone());
-        let (one, maze_one_state) = self.maze_one.step(&node.maze_state.maze_one_state, direction);
-        let (two, maze_two_state) = self.maze_two.step(&node.maze_state.maze_two_state, direction);
+        solution.push(direction);
+        let (one, maze_one_state) = self.maze_one.step(&node.maze_state.maze_one_state, &direction);
+        let (two, maze_two_state) = self.maze_two.step(&node.maze_state.maze_two_state, &direction);
         let new_node = Node {
             maze_state: MazeState {maze_one_state, maze_two_state},
             solution,
