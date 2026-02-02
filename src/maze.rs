@@ -64,8 +64,7 @@ impl Maze {
         let mut to_explore_next = vec![state.clone()];
         for _ in 0..1000 {
             if to_explore_next.len() == 0 {break;}
-            let to_explore = to_explore_next.clone();
-            to_explore_next = vec![];
+            let to_explore = std::mem::take(&mut to_explore_next);
             for maze_state in to_explore.into_iter() {
                 for direction in Direction::iter() {
                     let (allowed, new_state) = self.step(&maze_state, &direction);
