@@ -2,38 +2,27 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
-use std::hash::{Hash, Hasher};
 
 use strum::IntoEnumIterator;
 
 use crate::singlemaze::{Direction, SingleMaze, SingleMazeState};
 
-#[derive(Clone)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub struct MazeState {
     maze_one_state: SingleMazeState,
     maze_two_state: SingleMazeState,
-    solution: Vec<Direction>,
 }
-
-impl Hash for MazeState {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.maze_one_state.hash(state);
-        self.maze_two_state.hash(state);
-    }
-}
-
-impl PartialEq for MazeState {
-    fn eq(&self, other: &Self) -> bool {
-        self.maze_one_state == other.maze_one_state && self.maze_two_state == other.maze_two_state
-    }
-}
-
-impl Eq for MazeState {}
 
 impl MazeState {
     fn won(&self) -> bool {
         self.maze_one_state.robot_outside && self.maze_two_state.robot_outside
     }
+}
+
+#[derive(Clone)]
+struct Node {
+    maze_state: MazeState,
+    solution: Vec<Direction>,
 }
 
 pub struct Maze {
@@ -51,7 +40,7 @@ impl Maze {
         let (maze_two, maze_two_state) = SingleMaze::from_lines(&mut lines);
         let no_exits_in_a_maze = maze_one.no_exit() || maze_two.no_exit();
         let maze = Maze { maze_one, maze_two, no_exits_in_a_maze };
-        let maze_state = MazeState {maze_one_state, maze_two_state, solution: vec![]};
+        let maze_state = MazeState {maze_one_state, maze_two_state};
         (maze, maze_state)
     }
 
@@ -62,19 +51,22 @@ impl Maze {
         let mut seen = HashSet::with_capacity(100_000);
         seen.insert(state.clone());
         let mut to_explore_next = Vec::with_capacity(10_000);
-        to_explore_next.push(state.clone());
+        to_explore_next.push( Node {
+            maze_state: state.clone(),
+            solution: Vec::with_capacity(1000),
+        });
         for _ in 0..1000 {
             if to_explore_next.len() == 0 {break;}
             let to_explore = std::mem::take(&mut to_explore_next);
-            for maze_state in to_explore.into_iter() {
+            for node in to_explore.into_iter() {
                 for direction in Direction::iter() {
-                    let (allowed, new_state) = self.step(&maze_state, &direction);
+                    let (allowed, new_node) = self.step(&node, &direction);
                     if allowed {
-                        if new_state.won() {
-                            return new_state.solution;
+                        if new_node.maze_state.won() {
+                            return new_node.solution;
                         }
-                        else if seen.insert(new_state.clone()) {
-                            to_explore_next.push(new_state);
+                        else if seen.insert(new_node.maze_state.clone()) {
+                            to_explore_next.push(new_node);
                         }
                     }
                 }
@@ -83,13 +75,16 @@ impl Maze {
         vec![]
     }
 
-    fn step(&self, state: &MazeState, direction: &Direction) -> (bool, MazeState) {
-        let mut solution = state.solution.clone();
+    fn step(&self, node: &Node, direction: &Direction) -> (bool, Node) {
+        let mut solution = node.solution.clone();
         solution.push(direction.clone());
-        let (one, maze_one_state) = self.maze_one.step(&state.maze_one_state, direction);
-        let (two, maze_two_state) = self.maze_two.step(&state.maze_two_state, direction);
-        let new_state = MazeState {maze_one_state, maze_two_state, solution};
-        (one && two, new_state)
+        let (one, maze_one_state) = self.maze_one.step(&node.maze_state.maze_one_state, direction);
+        let (two, maze_two_state) = self.maze_two.step(&node.maze_state.maze_two_state, direction);
+        let new_node = Node {
+            maze_state: MazeState {maze_one_state, maze_two_state},
+            solution,
+        };
+        (one && two, new_node)
     }
 
     pub fn write_solution<P>(&self, state: MazeState, output_path: P) -> std::io::Result<()>
