@@ -109,9 +109,9 @@ impl SingleMaze {
         let mut line_one_split = line_one.split(' ').map(|n| n.parse::<usize>().unwrap());
         let rows = line_one_split.next().unwrap();
         let columns = line_one_split.next().unwrap();
-        let mut layout = vec![];
+        let mut layout = Vec::with_capacity(rows*columns);
         let mut initial_position = 0;
-        let mut exits = vec![];
+        let mut exits = Vec::with_capacity(2*(rows+columns));
         for row in 0..rows {
             for (column, char) in lines.next().unwrap().chars().enumerate() {
                 match char {
@@ -138,8 +138,8 @@ impl SingleMaze {
             }
         }
         let number_guards = lines.next().unwrap().parse::<usize>().unwrap();
-        let mut guards = vec![];
-        let mut guards_states = vec![];
+        let mut guards = Vec::with_capacity(10);
+        let mut guards_states = Vec::with_capacity(10);
         for _ in 0..number_guards {
             let line_guard = lines.next().unwrap();
             let mut line_guard_split = line_guard.split(' ');
