@@ -2,7 +2,7 @@ use std::hash::{Hash, Hasher};
 
 use strum_macros::EnumIter;
 
-#[derive(EnumIter, Clone, PartialEq)]
+#[derive(EnumIter, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
     North,
     East,
@@ -40,7 +40,7 @@ impl Direction {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 struct GuardState {
     position: usize,
     reversed_direction: bool,
@@ -53,6 +53,14 @@ impl Hash for GuardState {
         self.steps_to_starting_position.hash(state);
     }
 }
+
+impl PartialEq for GuardState {
+    fn eq(&self, other: &Self) -> bool {
+        self.reversed_direction == other.reversed_direction && self.steps_to_starting_position == other.steps_to_starting_position
+    }
+}
+
+impl Eq for GuardState {}
 
 pub struct Guard {
     patrol_path_size: usize,
@@ -67,8 +75,8 @@ impl Guard {
         }
     }
 
-    fn step(&self, state: &GuardState) -> GuardState {
-        let mut new_state = state.clone();
+    fn step(&self, state: GuardState) -> GuardState {
+        let mut new_state = state;
         if state.steps_to_starting_position == 0 {
             new_state.reversed_direction = false;
         }
@@ -89,7 +97,7 @@ impl Guard {
     }
 }
 
-#[derive(Clone, Hash)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub struct SingleMazeState {
     guards_states: Vec<GuardState>,
     robot_position: usize,
@@ -191,7 +199,7 @@ impl SingleMaze {
         let robot_move = direction.to_position_change(self.columns);
         let new_robot_position = (state.robot_position as isize + robot_move) as usize;
         for (index_guard, guard) in self.guards.iter().enumerate(){
-            let guard_state = &state.guards_states[index_guard];
+            let guard_state = state.guards_states[index_guard];
             let new_guard_state = guard.step(guard_state);
             if new_guard_state.position == new_robot_position || (guard_state.position == new_robot_position && new_guard_state.position == state.robot_position) {
                 // caught by a guard

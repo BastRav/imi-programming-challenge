@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
-use std::hash::{Hash, DefaultHasher, Hasher};
+use std::hash::{Hash, Hasher};
 
 use strum::IntoEnumIterator;
 
@@ -22,13 +22,15 @@ impl Hash for MazeState {
     }
 }
 
-impl MazeState {
-    fn get_hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        hasher.finish()
+impl PartialEq for MazeState {
+    fn eq(&self, other: &Self) -> bool {
+        self.maze_one_state == other.maze_one_state && self.maze_two_state == other.maze_two_state
     }
+}
 
+impl Eq for MazeState {}
+
+impl MazeState {
     fn won(&self) -> bool {
         self.maze_one_state.robot_outside && self.maze_two_state.robot_outside
     }
@@ -53,12 +55,12 @@ impl Maze {
         (maze, maze_state)
     }
 
-    fn solve(&self, state: &MazeState) -> Vec<Direction> {
+    fn solve(&self, state: MazeState) -> Vec<Direction> {
         if self.no_exits_in_a_maze {
             return vec![];
         }
         let mut hashes_seen = HashSet::new();
-        hashes_seen.insert(state.get_hash());
+        hashes_seen.insert(state.clone());
         let mut to_explore_next = vec![state.clone()];
         for _ in 0..1000 {
             if to_explore_next.len() == 0 {break;}
@@ -71,7 +73,7 @@ impl Maze {
                         if new_state.won() {
                             return new_state.solution;
                         }
-                        else if hashes_seen.insert(new_state.get_hash()) {
+                        else if hashes_seen.insert(new_state.clone()) {
                             to_explore_next.push(new_state);
                         }
                     }
@@ -90,7 +92,7 @@ impl Maze {
         (one && two, new_state)
     }
 
-    pub fn write_solution<P>(&self, state:&MazeState, output_path: P) -> std::io::Result<()>
+    pub fn write_solution<P>(&self, state: MazeState, output_path: P) -> std::io::Result<()>
     where P: AsRef<Path> {
         let solution = self.solve(state);
         let mut output_file = File::create(output_path)?;
