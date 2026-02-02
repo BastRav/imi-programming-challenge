@@ -49,7 +49,7 @@ struct GuardState {
 
 impl Hash for GuardState {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.position.hash(state);
+        self.reversed_direction.hash(state);
         self.steps_to_starting_position.hash(state);
     }
 }
