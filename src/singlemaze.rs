@@ -1,5 +1,3 @@
-use std::hash::{Hash, Hasher};
-
 use strum_macros::EnumIter;
 
 #[derive(EnumIter, Clone, Copy, PartialEq, Eq)]
@@ -40,36 +38,22 @@ impl Direction {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
 struct GuardState {
-    position: usize,
     reversed_direction: bool,
     steps_to_starting_position: usize,
 }
 
-impl Hash for GuardState {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.reversed_direction.hash(state);
-        self.steps_to_starting_position.hash(state);
-    }
-}
-
-impl PartialEq for GuardState {
-    fn eq(&self, other: &Self) -> bool {
-        self.reversed_direction == other.reversed_direction && self.steps_to_starting_position == other.steps_to_starting_position
-    }
-}
-
-impl Eq for GuardState {}
-
 pub struct Guard {
+    starting_position: usize,
     patrol_path_size: usize,
     movement: isize,
 }
 
 impl Guard {
-    fn new(patrol_path_size: usize, movement: isize) -> Self {
+    fn new(starting_position: usize, patrol_path_size: usize, movement: isize) -> Self {
         Self {
+            starting_position,
             patrol_path_size,
             movement,
         }
@@ -83,16 +67,12 @@ impl Guard {
         else if state.steps_to_starting_position == self.patrol_path_size - 1 {
             new_state.reversed_direction = true;
         }
-        let mut position_isize = new_state.position as isize;
         if new_state.reversed_direction {
             new_state.steps_to_starting_position -= 1;
-            position_isize -= self.movement;
         }
         else {
             new_state.steps_to_starting_position += 1;
-            position_isize += self.movement;
         }
-        new_state.position = position_isize as usize;
         new_state
     }
 }
@@ -156,9 +136,8 @@ impl SingleMaze {
             let patrol_path_size = line_guard_split.next().unwrap().parse::<usize>().unwrap();
             let direction_str = line_guard_split.next().unwrap();
             let direction = Direction::from_char(direction_str.chars().next().unwrap());
-            let guard = Guard::new(patrol_path_size, direction.to_position_change(columns));
+            let guard = Guard::new(row * columns + column, patrol_path_size, direction.to_position_change(columns));
             let state = GuardState {
-                position: row * columns + column,
                 reversed_direction: false,
                 steps_to_starting_position: 0,
             };
@@ -201,7 +180,10 @@ impl SingleMaze {
         for (index_guard, guard) in self.guards.iter().enumerate(){
             let guard_state = state.guards_states[index_guard];
             let new_guard_state = guard.step(guard_state);
-            if new_guard_state.position == new_robot_position || (guard_state.position == new_robot_position && new_guard_state.position == state.robot_position) {
+            let starting_position = guard.starting_position as isize;
+            let guard_position = (starting_position + guard_state.steps_to_starting_position as isize * guard.movement) as usize;
+            let new_guard_position = (starting_position + new_guard_state.steps_to_starting_position as isize * guard.movement) as usize;
+            if new_guard_position == new_robot_position || (guard_position == new_robot_position && new_guard_position == state.robot_position) {
                 // caught by a guard
                 return (false, new_state);
             }
