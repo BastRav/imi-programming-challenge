@@ -208,10 +208,6 @@ impl SingleMaze {
 
     pub fn step(&self, state: &SingleMazeState, direction: &Direction) -> (bool, SingleMazeState) {
         let mut new_state = state.clone();
-        new_state.guards_cycle += 1;
-        if new_state.guards_cycle == self.guards_cycle_length {
-            new_state.guards_cycle = 0;
-        }
         if state.robot_outside {
             // already won
             return (true, new_state);
@@ -222,6 +218,10 @@ impl SingleMaze {
                 new_state.robot_outside = true;
                 return (true, new_state);
             }
+        }
+        new_state.guards_cycle += 1;
+        if new_state.guards_cycle == self.guards_cycle_length {
+            new_state.guards_cycle = 0;
         }
         let robot_move = direction.to_position_change(self.columns);
         let new_robot_position = (state.robot_position as isize + robot_move) as usize;
@@ -239,12 +239,9 @@ impl SingleMaze {
         }
         if self.layout[new_robot_position] {
             // move is possible
+            // otherwise hit a wall, it's allowed but you do not move
             new_state.robot_position = new_robot_position;
-            return (true, new_state);
         }
-        else {
-            // hit a wall, it's allowed but you do not move
-            return (true, new_state);
-        }
+        (true, new_state)
     }
 }
