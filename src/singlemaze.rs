@@ -225,22 +225,22 @@ impl SingleMaze {
         }
         let robot_move = direction.to_position_change(self.columns);
         let new_robot_position = (state.robot_position as isize + robot_move) as usize;
+        if self.layout[new_robot_position] {
+            // move is possible
+            // otherwise hit a wall, it's allowed but you do not move
+            new_state.robot_position = new_robot_position;
+        }
         for (index_guard, guard) in self.guards.iter().enumerate(){
             let guard_state = state.guards_states[index_guard];
             let new_guard_state = guard.step(guard_state);
             let starting_position = guard.starting_position as isize;
             let guard_position = (starting_position + guard_state.steps_to_starting_position as isize * guard.movement) as usize;
             let new_guard_position = (starting_position + new_guard_state.steps_to_starting_position as isize * guard.movement) as usize;
-            if new_guard_position == new_robot_position || (guard_position == new_robot_position && new_guard_position == state.robot_position) {
+            if new_guard_position == new_state.robot_position || (guard_position == new_state.robot_position && new_guard_position == state.robot_position) {
                 // caught by a guard
                 return (false, new_state);
             }
             new_state.guards_states[index_guard] = new_guard_state;
-        }
-        if self.layout[new_robot_position] {
-            // move is possible
-            // otherwise hit a wall, it's allowed but you do not move
-            new_state.robot_position = new_robot_position;
         }
         (true, new_state)
     }
