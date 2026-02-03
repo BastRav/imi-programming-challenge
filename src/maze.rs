@@ -7,7 +7,6 @@ use strum::IntoEnumIterator;
 
 use crate::singlemaze::{Direction, SingleMaze, SingleMazeState};
 
-#[derive(Clone)]
 pub struct MazeState {
     maze_one_state: SingleMazeState,
     maze_two_state: SingleMazeState,
@@ -25,7 +24,6 @@ impl MazeState {
     }
 }
 
-#[derive(Clone)]
 struct Node {
     maze_state: MazeState,
     solution: Vec<Direction>,
@@ -56,7 +54,7 @@ impl Maze {
         seen.insert(state.uid());
         let mut to_explore_next = Vec::with_capacity(10_000);
         to_explore_next.push( Node {
-            maze_state: state.clone(),
+            maze_state: state,
             solution: Vec::with_capacity(1000),
         });
         for _ in 0..1000 {
