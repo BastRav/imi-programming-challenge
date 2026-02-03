@@ -34,7 +34,6 @@ struct Node {
 pub struct Maze {
     maze_one: SingleMaze,
     maze_two: SingleMaze,
-    no_exits_in_a_maze: bool,
 }
 
 impl Maze {
@@ -44,14 +43,13 @@ impl Maze {
         let mut lines = io::BufReader::new(file).lines().map(|l| l.unwrap());
         let (maze_one, maze_one_state) = SingleMaze::from_lines(&mut lines);
         let (maze_two, maze_two_state) = SingleMaze::from_lines(&mut lines);
-        let no_exits_in_a_maze = maze_one.no_exit() || maze_two.no_exit();
-        let maze = Maze { maze_one, maze_two, no_exits_in_a_maze };
+        let maze = Maze { maze_one, maze_two };
         let maze_state = MazeState {maze_one_state, maze_two_state};
         (maze, maze_state)
     }
 
     fn solve(&self, state: MazeState) -> Vec<Direction> {
-        if self.no_exits_in_a_maze {
+        if self.maze_one.no_solution(&state.maze_one_state) || self.maze_two.no_solution(&state.maze_two_state) {
             return vec![];
         }
         let mut seen = HashSet::with_capacity(100_000);
@@ -84,8 +82,8 @@ impl Maze {
     fn step(&self, node: &Node, direction: Direction) -> (bool, Node) {
         let mut solution = node.solution.clone();
         solution.push(direction);
-        let (one, maze_one_state) = self.maze_one.step(&node.maze_state.maze_one_state, &direction);
-        let (two, maze_two_state) = self.maze_two.step(&node.maze_state.maze_two_state, &direction);
+        let (one, maze_one_state) = self.maze_one.step(&node.maze_state.maze_one_state, direction);
+        let (two, maze_two_state) = self.maze_two.step(&node.maze_state.maze_two_state, direction);
         let new_node = Node {
             maze_state: MazeState {maze_one_state, maze_two_state},
             solution,

@@ -1,4 +1,7 @@
+use std::collections::HashSet;
+
 use strum_macros::EnumIter;
+use strum::IntoEnumIterator;
 
 #[derive(EnumIter, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
@@ -202,18 +205,48 @@ impl SingleMaze {
         (maze, state)
     }
 
-    pub fn no_exit(&self) -> bool {
-        self.exits.len() == 0
+    pub fn no_solution(&self, state: &SingleMazeState) -> bool {
+        if self.exits.len() == 0 {
+            true
+        }
+        else {
+            !self.solve(state.clone())
+        }
     }
 
-    pub fn step(&self, state: &SingleMazeState, direction: &Direction) -> (bool, SingleMazeState) {
+    fn solve(&self, state: SingleMazeState) -> bool {
+        let mut seen = HashSet::with_capacity(100_000);
+        seen.insert(state.uid());
+        let mut to_explore_next = Vec::with_capacity(10_000);
+        to_explore_next.push(state);
+        for _ in 0..1000 {
+            if to_explore_next.len() == 0 {break;}
+            let to_explore = std::mem::take(&mut to_explore_next);
+            for node in to_explore.into_iter() {
+                for direction in Direction::iter() {
+                    let (allowed, new_node) = self.step(&node, direction);
+                    if allowed {
+                        if new_node.robot_outside {
+                            return true;
+                        }
+                        else if seen.insert(new_node.uid()) {
+                            to_explore_next.push(new_node);
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    pub fn step(&self, state: &SingleMazeState, direction: Direction) -> (bool, SingleMazeState) {
         let mut new_state = state.clone();
         if state.robot_outside {
             // already won
             return (true, new_state);
         }
         for (position_exit, direction_exit) in self.exits.iter() {
-            if state.robot_position == *position_exit && direction == direction_exit {
+            if state.robot_position == *position_exit && direction == *direction_exit {
                 // it's a win
                 new_state.robot_outside = true;
                 return (true, new_state);
