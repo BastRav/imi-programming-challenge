@@ -150,8 +150,9 @@ impl SingleMaze {
         for _ in 0..number_guards {
             let line_guard = lines.next().unwrap();
             let mut line_guard_split = line_guard.split(' ');
-            let row = line_guard_split.next().unwrap().parse::<usize>().unwrap();
-            let column = line_guard_split.next().unwrap().parse::<usize>().unwrap();
+            // convert to zero indexing!!!
+            let row = line_guard_split.next().unwrap().parse::<usize>().unwrap() - 1;
+            let column = line_guard_split.next().unwrap().parse::<usize>().unwrap() - 1;
             let patrol_path_size = line_guard_split.next().unwrap().parse::<usize>().unwrap();
             match patrol_path_size {
                 2 => guard_path_two = true,
