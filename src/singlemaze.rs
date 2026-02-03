@@ -38,7 +38,7 @@ impl Direction {
     }
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 struct GuardState {
     reversed_direction: bool,
     steps_to_starting_position: usize,
@@ -77,11 +77,26 @@ impl Guard {
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct SingleMazeState {
     guards_states: Vec<GuardState>,
+    guards_cycle: usize,
     robot_position: usize,
     pub robot_outside: bool,
+}
+
+impl SingleMazeState {
+    pub fn uid(&self) -> usize {
+        if self.robot_outside {
+            0
+        }
+        else {
+            let outside = 1; // 1st bit (least significant)
+            let position = self.robot_position << 1; // 400 possibilities, 9 bits => 2nd to 10th
+            let cycle = self.guards_cycle << 10; // 12 possibilities, 4 bits => 11th to 14th
+            outside +  position + cycle
+        }
+    }
 }
 
 pub struct SingleMaze {
@@ -89,6 +104,7 @@ pub struct SingleMaze {
     layout: Vec<bool>, // false means wall, true means open
     guards: Vec<Guard>,
     exits: Vec<(usize, Direction)>,
+    guards_cycle_length: usize,
 }
 
 impl SingleMaze {
@@ -128,12 +144,21 @@ impl SingleMaze {
         let number_guards = lines.next().unwrap().parse::<usize>().unwrap();
         let mut guards = Vec::with_capacity(10);
         let mut guards_states = Vec::with_capacity(10);
+        let mut guard_path_two = false;
+        let mut guard_path_three = false;
+        let mut guard_path_four = false;
         for _ in 0..number_guards {
             let line_guard = lines.next().unwrap();
             let mut line_guard_split = line_guard.split(' ');
             let row = line_guard_split.next().unwrap().parse::<usize>().unwrap();
             let column = line_guard_split.next().unwrap().parse::<usize>().unwrap();
             let patrol_path_size = line_guard_split.next().unwrap().parse::<usize>().unwrap();
+            match patrol_path_size {
+                2 => guard_path_two = true,
+                3 => guard_path_three = true,
+                4 => guard_path_four = true,
+                _ => unreachable!("Guard path size should 2..=4"),
+            }
             let direction_str = line_guard_split.next().unwrap();
             let direction = Direction::from_char(direction_str.chars().next().unwrap());
             let guard = Guard::new(row * columns + column, patrol_path_size, direction.to_position_change(columns));
@@ -148,12 +173,30 @@ impl SingleMaze {
             robot_position: initial_position,
             robot_outside: false,
             guards_states: guards_states,
+            guards_cycle: 0,
         };
+        let mut guards_cycle_length = 1;
+        if guard_path_four {
+            if guard_path_three {
+                guards_cycle_length = 12;
+            }
+            else {
+                guards_cycle_length = 6;
+            }
+        }
+        else if guard_path_three {
+            // does not matter if there is a two as well
+            guards_cycle_length = 4;
+        }
+        else if guard_path_two {
+            guards_cycle_length = 2;
+        }
         let maze = SingleMaze {
             columns: columns,
             layout: layout,
             guards,
             exits,
+            guards_cycle_length
         };
         (maze, state)
     }
@@ -164,6 +207,10 @@ impl SingleMaze {
 
     pub fn step(&self, state: &SingleMazeState, direction: &Direction) -> (bool, SingleMazeState) {
         let mut new_state = state.clone();
+        new_state.guards_cycle += 1;
+        if new_state.guards_cycle == self.guards_cycle_length {
+            new_state.guards_cycle = 0;
+        }
         if state.robot_outside {
             // already won
             return (true, new_state);

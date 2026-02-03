@@ -7,7 +7,7 @@ use strum::IntoEnumIterator;
 
 use crate::singlemaze::{Direction, SingleMaze, SingleMazeState};
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct MazeState {
     maze_one_state: SingleMazeState,
     maze_two_state: SingleMazeState,
@@ -16,6 +16,12 @@ pub struct MazeState {
 impl MazeState {
     fn won(&self) -> bool {
         self.maze_one_state.robot_outside && self.maze_two_state.robot_outside
+    }
+
+    fn uid(&self) -> usize {
+        let uid_one = self.maze_one_state.uid(); // 1st to 14th
+        let uid_two = self.maze_two_state.uid() << 14; // 15th to 28th
+        uid_one + uid_two
     }
 }
 
@@ -49,7 +55,7 @@ impl Maze {
             return vec![];
         }
         let mut seen = HashSet::with_capacity(100_000);
-        seen.insert(state.clone());
+        seen.insert(state.uid());
         let mut to_explore_next = Vec::with_capacity(10_000);
         to_explore_next.push( Node {
             maze_state: state.clone(),
@@ -65,7 +71,7 @@ impl Maze {
                         if new_node.maze_state.won() {
                             return new_node.solution;
                         }
-                        else if seen.insert(new_node.maze_state.clone()) {
+                        else if seen.insert(new_node.maze_state.uid()) {
                             to_explore_next.push(new_node);
                         }
                     }
